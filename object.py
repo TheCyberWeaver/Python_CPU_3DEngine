@@ -33,7 +33,7 @@ class Object:
         self.worldCoordinate=np.array([0,0,0])
 
         self.font = pg.font.SysFont('Arial', 30, bold=True)
-        #self.color_faces = [(pg.Color('orange'), face) for face in self.faces]
+        self.color_faces = [list(np.random.choice(range(256), size=3)) for face in self.faces]
 
     def translate(self, pos):
         self.vertices = self.vertices @ translate(pos)
@@ -75,3 +75,5 @@ class Face(Object):
             for j in range(0, n * 2 - 1):
                 self.faces.append([i * 20 + j, i * 20 + j + 1, (i + 1) * 20 + j + 1, (i + 1) * 20 + j])
         self.worldCoordinate = np.array([0, 0, 0])
+
+        self.color_faces = [list(np.random.choice(range(256), size=3)) for face in self.faces]
