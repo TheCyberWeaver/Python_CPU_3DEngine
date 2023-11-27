@@ -8,27 +8,27 @@ import copy
 class ThreeDimensionalEngine:
     def __init__(self):
         pg.init()
-        print("|<======================3D Render start======================>|")
-        self.ScreenRES = self.WIDTH, self.HEIGHT = 800, 600
-        # self.OuterRES = self.O_WIDTH, self.O_HEIGHT = self.WIDTH*2, self.HEIGHT*2
+        print("|<======================3D Renderer start======================>|")
+        self.ScreenRES = self.WIDTH, self.HEIGHT = 800, 600  # set the size of the screen
         self.H_WIDTH, self.H_HEIGHT = self.WIDTH // 2, self.HEIGHT // 2
         self.FPS = 60
-        # self.screen = pg.display.set_mode((1600,1000))
         self.screen = pg.display.set_mode((self.WIDTH, self.HEIGHT))
         self.clock = pg.time.Clock()
+
         self.objectList = []
         self.create_objects()
+
         self.font1 = pg.font.SysFont("arial", 18)
 
         self.viewPortMatrix = np.array([
-            [self.WIDTH, 0, 0, self.H_WIDTH],  # 采用双
+            [self.WIDTH, 0, 0, self.H_WIDTH],  # the actual rendering size should be twice bigger as the screen size
             [0, -self.HEIGHT, 0, self.H_HEIGHT],
             [0, 0, 1, 0],
             [0, 0, 0, 1]
         ])
 
     def create_objects(self):
-        self.camera = Camera(self, [0, 0, -55])
+        self.camera = Camera(self, [1, 1, -55],rotationMode="anyAxis")
         cube = Object(self)
         cube.vertices = np.array([[0, 0, 0, 1],
                                   [0, 20, 0, 1],
@@ -57,10 +57,10 @@ class ThreeDimensionalEngine:
         sphere.translate([-25, -25, -25])
         sphere.scale(7)
 
-        self.objectList.append(tank)
         #self.objectList.append(sphere)
+        self.objectList.append(floor)
+        self.objectList.append(tank)
         #self.objectList.append(cube)
-        #self.objectList.append(floor)
 
     def get_object_from_file(self, filename):
         vertex, faces = [], []
@@ -136,74 +136,84 @@ class ThreeDimensionalEngine:
                               [(screenMatrix[0][i] / screenMatrix[3][i], screenMatrix[1][i] / screenMatrix[3][i]) for i
                                in face], 1)
 
-    def drawGen3(self, object: Object, drawPoints=False, drawLines=False, drawFace=True):
-        worldCoordinate = (object.vertices + np.r_[object.worldCoordinate, np.array([0])]).T
+    def drawGen3(self, drawPoints=False, drawLines=False, drawFace=True):
 
-        normalSpaceMatrix = self.camera.PerMatrix @ self.camera.getCamMatrix()
+        for object in self.objectList:
 
-        normalSpace = normalSpaceMatrix @ worldCoordinate
+            worldCoordinates = (object.vertices + np.r_[
+                object.worldCoordinate, np.array([0])]).T  # coordinates in the world system
 
-        normalSpace /= normalSpace[3]
+            normalSpaceMatrix = self.camera.PerMatrix @ self.camera.getCamMatrix()  # a matrix that convert the coordinates into a [-1,1]^3 cube
 
-        mask = np.all(np.abs(normalSpace) <= 1, axis=0)
+            normalSpace = normalSpaceMatrix @ worldCoordinates  # caculating the matrix above an above and then applying them to all coordinates is faster than calculating them one by one
 
-        screenMatrix = self.viewPortMatrix @ normalSpace
+            normalSpace /= normalSpace[
+                3]  # devide the normalized matrix by its w to extract real coordinates from Homogeneous coordinate
 
+            mask = np.all(np.abs(normalSpace) <= 1,
+                          axis=0)  # mark all coordinates that is out of the [-1,1]^3 cube, which means they should not be rendered
 
+            screenMatrix = self.viewPortMatrix @ normalSpace  # convert the x,y coordinates to the screen coordinate system
 
-        if drawFace:
-            faceBuffer = []
-            for faceIndex in range(len(object.faces)):
-                if np.all([mask[i] for i in object.faces[faceIndex]]):
-                    averageDepth = 0
-                    for point in object.faces[faceIndex]:
-                        averageDepth += screenMatrix[2][point]
-                    averageDepth /= len(object.faces[faceIndex])
+            if drawFace:
+                faceBuffer = []
+                for faceIndex in range(
+                        len(object.faces)):  # use the average depth of a face to decide the order of rendering
+                    if np.all([mask[i] for i in
+                               object.faces[faceIndex]]):  # only if the all the verticies are inside the view cube
+                        averageDepth = 0
+                        for point in object.faces[faceIndex]:
+                            averageDepth += screenMatrix[2][point]
+                        averageDepth /= len(object.faces[faceIndex])
 
-                    faceBuffer.append((faceIndex, averageDepth))
+                        faceBuffer.append((faceIndex, averageDepth))
 
-            faceBuffer.sort(key=lambda x: x[1], reverse=True)
-            for faceIndex, depth in faceBuffer:
-                # print(worldCoordinate[2][object.faces[faceIndex][0]])
-                #print(object.color_faces[faceIndex])
-                pg.draw.polygon(self.screen, object.color_faces[faceIndex],
-                                [(screenMatrix[0][pointIndex], screenMatrix[1][pointIndex]) for pointIndex in
-                                 object.faces[faceIndex]])
+                faceBuffer.sort(key=lambda x: x[1], reverse=True)
 
+                for faceIndex, depth in faceBuffer:  # draw faces
+                    # print(worldCoordinate[2][object.faces[faceIndex][0]])
+                    # print(object.color_faces[faceIndex])
+                    pg.draw.polygon(self.screen, object.color_faces[faceIndex],
+                                    [(screenMatrix[0][pointIndex], screenMatrix[1][pointIndex]) for pointIndex in
+                                     object.faces[faceIndex]])
 
-        if drawLines:
-            for face in object.faces:
-                if np.all([mask[i] for i in face]):
-                    pg.draw.lines(self.screen, (255, 255, 100), True,
-                                  [(screenMatrix[0][i], screenMatrix[1][i]) for i in face], 1)
+            if drawLines:
+                for face in object.faces:
+                    if np.all([mask[i] for i in face]):
+                        pg.draw.aalines(self.screen, (255, 255, 100), True,
+                                      [(screenMatrix[0][i], screenMatrix[1][i]) for i in face], 1)
 
-        if drawPoints:
-            for i in range(len(normalSpace[0])):
-                if mask[i]:
-                    pg.draw.circle(self.screen, (255, 255, 255),
-                                   [screenMatrix[0][i], screenMatrix[1][i]], 3)
+            if drawPoints:
+                for i in range(len(normalSpace[0])):
+                    if mask[i]:
+                        pg.draw.circle(self.screen, (255, 255, 255),
+                                       [screenMatrix[0][i], screenMatrix[1][i]], 3)
 
     def print_text(self, x, y, text, color=(255, 255, 255)):
         """print text to screen"""
         img_text = self.font1.render(text, True, color)
         self.screen.blit(img_text, (x, y))
 
-    def updateScreen(self):
-        self.screen.fill((pg.Color("green")))
-        pg.draw.rect(self.screen, pg.Color("black"), ((0, 0), (self.WIDTH, self.HEIGHT)))
-        for object in self.objectList:
-            self.drawGen3(object)
-
-        # self.objectList[0].rotate_y(0.01)
-
     def run(self):
+        """the main draw loop"""
         while True:
-            self.updateScreen()
-            self.camera.control()
+
+            self.screen.fill((pg.Color("green")))
+            pg.draw.rect(self.screen, pg.Color("black"), ((0, 0), (self.WIDTH, self.HEIGHT)))
+
+            """for object in self.objectList:
+                self.drawGen1(object)"""
+
+            """for object in self.objectList:
+                self.drawGen2(object)"""
+
+            self.drawGen3()
+
+            self.camera.control()  # get input from keyboard and do transform to the direction matrix of the camera
             [exit() for i in pg.event.get() if i.type == pg.QUIT]
-            pg.display.set_caption(str(self.clock.get_fps()))
+            pg.display.set_caption(str(self.clock.get_fps()))  # show FPS on caption
             pg.display.flip()
-            self.clock.tick(self.FPS)
+            self.clock.tick(self.FPS)  # set maximum FPS
 
 
 if __name__ == '__main__':
