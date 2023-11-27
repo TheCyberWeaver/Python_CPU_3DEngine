@@ -57,10 +57,10 @@ class ThreeDimensionalEngine:
         sphere.translate([-25, -25, -25])
         sphere.scale(7)
 
-        #self.objectList.append(sphere)
+        self.objectList.append(sphere)
         self.objectList.append(floor)
-        self.objectList.append(tank)
-        #self.objectList.append(cube)
+        #self.objectList.append(tank)
+        self.objectList.append(cube)
 
     def get_object_from_file(self, filename):
         vertex, faces = [], []
@@ -136,7 +136,7 @@ class ThreeDimensionalEngine:
                               [(screenMatrix[0][i] / screenMatrix[3][i], screenMatrix[1][i] / screenMatrix[3][i]) for i
                                in face], 1)
 
-    def drawGen3(self, drawPoints=False, drawLines=False, drawFace=True):
+    def drawGen3(self, drawPoints=False, drawLines=True, drawFace=False):
 
         for object in self.objectList:
 
